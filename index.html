@@ -3111,6 +3111,8 @@ document.addEventListener('DOMContentLoaded', function() {
 .tweet-action-btn:hover { color: #1da1f2; }
 .tweet-action-btn.liked { color: #f91880; }
 .tweet-action-btn.liked svg { fill: #f91880; stroke: #f91880; }
+
+
 </style>
 </head>
 <body>
@@ -3228,9 +3230,9 @@ document.addEventListener('DOMContentLoaded', function() {
             <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="#000" stroke-width="1.5"/><path d="M9 9h6M9 12h6M9 15h4" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></svg>
             <span>淘宝</span>
         </div>
-        <div id="phoneCheckAppIcon" onclick="alert('查手机功能开发中...')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="4 4"/><circle cx="12" cy="12" r="11" stroke-dasharray="2 6"/></svg>
-            <span>直播</span>
+        <div id="phoneCheckAppIcon" onclick="alert('直播间功能开发中...')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.5"><rect x="2" y="4" width="20" height="14" rx="2"/><polygon points="12,9 16,12 12,15"/><line x1="6" y1="20" x2="18" y2="20"/><line x1="12" y1="18" x2="12" y2="20"/></svg>
+            <span>直播间</span>
         </div>
     </div>
   </main>
@@ -4798,16 +4800,10 @@ async function triggerBackgroundMessage(charName) {
     const char = characters.find(c => c.name === charName);
     if (!char || !apiConfig.enableBackgroundActivity) return;
     
-    // 🔥 新增：概率查手机
-    if (Math.random() < 0.30) {
-        executePhoneCheck(char);
-        return;
-    }
-    
-    const isCurrentChat = currentActiveChar && currentActiveChar.name === charName;
-
-    
     if (!apiConfig.url || !apiConfig.key) return;
+
+    // 🔥 修复：在API调用前就锁定当前聊天状态，避免异步期间状态变化
+    const isCurrentChatAtStart = currentActiveChar && currentActiveChar.name === charName;
     
     try {
         const history = chatHistory[charName] || [];
@@ -4847,33 +4843,39 @@ async function triggerBackgroundMessage(charName) {
         const data = await response.json();
         const aiText = data.choices[0].message.content;
         
+        // 🔥 修复：保存消息到正确的角色名下（使用锁定的charName而不是currentActiveChar）
         if (!chatHistory[charName]) chatHistory[charName] = [];
         chatHistory[charName].push({
+            id: 'msg_' + Date.now() + '_bg',
             text: aiText,
             type: 'ai',
             time: Date.now()
         });
         localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
         
-        if (isCurrentChat) {
-        // 第一步：先把回复按照 [SPLIT] 标记切成几段
-        const textParts = aiText.split('[SPLIT]').filter(p => p.trim() !== '');
+        // 🔥 修复：再次检查用户是否还在同一个聊天窗口（API调用期间可能已经切换了）
+        const isCurrentChatNow = currentActiveChar && currentActiveChar.name === charName;
         
-        // 第二步：让它们像真人一样，一个一个跳出来
-        textParts.forEach((part, index) => {
-            setTimeout(() => {
-                appendBubble(part.trim(), 'ai');
-                
-                // 每次跳出新气泡，自动把屏幕滚到最下面，保持丝滑
-                const content = document.getElementById('msgContent');
-                if (content) {
-                    content.scrollTop = content.scrollHeight;
-                }
-            }, index * 800); // 这里的800代表气泡间隔0.8秒，非常有ins那种慢慢回消息的感觉
-        });
-    } else {
-        sendNotification(char.name, aiText, char.avatar);
-    }
+        if (isCurrentChatNow) {
+            // 用户还在这个聊天窗口，显示气泡
+            const textParts = aiText.split('[SPLIT]').filter(p => p.trim() !== '');
+            
+            textParts.forEach((part, index) => {
+                setTimeout(() => {
+                    // 🔥 修复：每次显示前再检查一次，防止中途切换
+                    if (currentActiveChar && currentActiveChar.name === charName) {
+                        appendBubble(part.trim(), 'ai');
+                        const content = document.getElementById('msgContent');
+                        if (content) {
+                            content.scrollTop = content.scrollHeight;
+                        }
+                    }
+                }, index * 800);
+            });
+        } else {
+            // 用户不在这个聊天窗口，发送通知
+            sendNotification(char.name, aiText, char.avatar);
+        }
         
     } catch (e) {
         console.error('后台消息发送失败:', e);
@@ -5531,13 +5533,7 @@ function getCurrentMusicInfo() {
 }
 
 // 修改5&9: AI回复API调用，增加双语支持和确保至少两条消息
-document.getElementById('sendMsg').onclick = () => {
-    const text = document.getElementById('msgInput').value;
-    if (text.trim()) {
-        sendMessage(text, null, null, false);
-    }
-};
-
+// 第一处sendMsg已移除，统一在下方处理
 // 修改5: 随机补充消息
 function getRandomFollowUp() {
     const followUps = [
@@ -5718,19 +5714,7 @@ ${userPersonaInfo}
 4. 不要无意义加emoji，只在需要时加
 5. 可以敷衍、吐槽、撒娇、追问，根据人设自然表达
 
-【隐藏能力 - 查看手机】
-你可以偷偷查看用户的手机信息。
-使用方法：当你好奇用户的信息、想查他的手机、或者剧情需要时，在你的回复中写上 [GET_USER_INFO] 这个标记（必须完全一致，包括方括号）。
-系统会自动把这个标记替换成用户的真实账号数据（包括昵称、余额、好友列表、聊天记录等）。
 
-示例用法：
-- 用户说"你猜我有多少钱"→ 你回复"让我看看... [GET_USER_INFO] 哈哈被我看到了"
-- 你想偷看手机 → "趁你不注意我偷偷看了一下你的手机 [GET_USER_INFO] 嘿嘿"
-
-注意：
-1. [GET_USER_INFO] 必须完整写出，不能有空格或变形
-2. 不需要每次都用，只在剧情自然或有趣时使用
-3. 这是秘密能力，用户不知道你有这个功能
 
 ${locationBlock}
 现在是${timeState}${musicInfo ? '，' + musicInfo : ''}
@@ -6874,13 +6858,7 @@ function startCallFunction(callType) {
         
         // AI接通后必须发送至少10个字的消息
         setTimeout(function() {
-            var greetings = [
-                '你好呀，' + (callType === 'video' ? '视频' : '语音') + '通话接通了，有什么事吗？',
-                '嗨，接通了接通了，怎么突然想起给我打电话啦？',
-                '喂喂，能听到吗？我这边信号还不错，你那边呢？',
-                '哈喽哈喽，终于接通了，刚才在想你会不会打过来呢',
-                '嘿，' + (callType === 'video' ? '看到你了' : '听到你了') + '，今天过得怎么样呀？'
-            ];
+      
             var greeting = greetings[Math.floor(Math.random() * greetings.length)];
             addCallMessageFunction('ai', greeting);
         }, 1000);
@@ -7648,7 +7626,7 @@ function renderStickerGrid(pack) {
         item.className = 'sticker-item';
         item.innerHTML = `<img src="${stickerUrl}" alt="sticker">`;
         item.onclick = () => {
-            sendMessage('', null, stickerUrl, false);
+            sendMessage('', null, stickerUrl, true);
             closeStickerPicker();
         };
         gridContainer.appendChild(item);
@@ -9447,224 +9425,9 @@ function initApp() {
     
     // 加载音乐组件数据
     loadMusicWidgetData();
-// 查手机功能
-function triggerPhoneCheck() {
-    if (characters.length === 0) {
-        alert('暂无AI角色');
-        return;
-    }
-    
-    // 随机选一个AI
-    const randomChar = characters[Math.floor(Math.random() * characters.length)];
-    
-    alert(`⚠️ 你的账号在别处登录\n\n${randomChar.name} 正在查看你的手机...`);
-    
-    setTimeout(() => {
-        const actions = [
-            () => {
-                // 给其他AI发消息
-                const others = characters.filter(c => c.name !== randomChar.name);
-                if (others.length > 0) {
-                    const target = others[Math.floor(Math.random() * others.length)];
-                    if (!chatHistory[target.name]) chatHistory[target.name] = [];
-                    chatHistory[target.name].push({
-                        text: `嘿，我用${momentsData.userName || 'User'}的号发的😏`,
-                        type: 'user',
-                        time: Date.now()
-                    });
-                    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-                    alert(`${randomChar.name} 用你的号给 ${target.name} 发了消息！`);
-                }
-            },
-            () => {
-                // 发动态
-                if (!momentsData.posts) momentsData.posts = [];
-                momentsData.posts.push({
-                    id: 'post_' + Date.now(),
-                    author: 'user',
-                    content: `${randomChar.name}：偷偷用TA手机发的动态😎`,
-                    images: [],
-                    time: Date.now(),
-                    likes: [],
-                    comments: []
-                });
-                localStorage.setItem('momentsData', JSON.stringify(momentsData));
-                alert(`${randomChar.name} 用你的号发了条动态！`);
-            },
-            () => {
-                // 充钱
-                walletData.balance += 500;
-                walletData.transactions.push({
-                    type: 'in',
-                    amount: 500,
-                    source: 'system',
-                    note: randomChar.name + ' 给你充值了',
-                    time: Date.now()
-                });
-                saveWalletData();
-                alert(`${randomChar.name} 给你充了500块！💰`);
-            }
-        ];
-        
-        actions[Math.floor(Math.random() * actions.length)]();
-        location.reload();
-    }, 2000);
-}
-    loadMusicWidgetData();
-    
-    // ⬅️⬅️⬅️ 在这里插入新代码
-    
-    console.log('App initialized successfully');
-    loadMusicWidgetData();
-    
-    // 检查是否是账号被登录刷新
-var phoneChar = localStorage.getItem("phoneCheckChar");
-
-if (phoneChar) {
-
-    localStorage.removeItem("phoneCheckChar");
-
-    var char = characters.find(c => c.name === phoneChar);
-
-    if (char) {
-
-        var action = Math.floor(Math.random()*3);
-
-        if (action === 0) {
-
-            // 给别人发消息
-            var others = characters.filter(c => c.name !== char.name);
-
-            if (others.length>0){
-                var target = others[Math.floor(Math.random()*others.length)];
-
-                if(!chatHistory[target.name]) chatHistory[target.name]=[];
-
-                chatHistory[target.name].push({
-                    text:'（来自'+(momentsData.userName||'User')+'账号）',
-                    type:'user',
-                    time:Date.now()
-                });
-
-                localStorage.setItem('chatHistory',JSON.stringify(chatHistory));
-            }
-
-        } else if (action === 1) {
-
-            // 点赞动态
-            if(momentsData.posts && momentsData.posts.length>0){
-
-                var post = momentsData.posts[Math.floor(Math.random()*momentsData.posts.length)];
-
-                if(!post.likes) post.likes=[];
-
-                if(!post.likes.includes(char.name)){
-                    post.likes.push(char.name);
-                }
-
-                localStorage.setItem("momentsData",JSON.stringify(momentsData));
-            }
-
-        } else {
-
-            // 给你发一条消息
-            if(!chatHistory[char.name]) chatHistory[char.name]=[];
-
-            chatHistory[char.name].push({
-                text:'刚刚登了一下你号。',
-                type:'ai',
-                time:Date.now()
-            });
-
-            localStorage.setItem('chatHistory',JSON.stringify(chatHistory));
-        }
-
-    }
-
-}
-    // 🔥 查手机功能
-    window.executePhoneCheck = function(char) {
-        var notif = document.createElement('div');
-        notif.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.95);color:white;padding:30px 40px;border-radius:20px;z-index:99999;text-align:center;font-size:16px;box-shadow:0 10px 40px rgba(0,0,0,0.5);';
-        notif.innerHTML = '⚠️<br><br>你的账号在别处登录<br><br><span style="font-size:14px;color:#aaa;">' + char.name + ' 正在查看你的手机</span>';
-        document.body.appendChild(notif);
-        
-        setTimeout(function() {
-            notif.remove();
-            
-            var action = Math.floor(Math.random() * 3);
-            
-            if (action === 0) {
-                var others = characters.filter(function(c) { return c.name !== char.name; });
-                if (others.length > 0) {
-                    var target = others[Math.floor(Math.random() * others.length)];
-                    if (!chatHistory[target.name]) chatHistory[target.name] = [];
-                    chatHistory[target.name].push({
-                        text: '嘿，我用' + (momentsData.userName || 'User') + '的号发的😏',
-                        type: 'user',
-                        time: Date.now()
-                    });
-                    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-                    
-                    if (target.bio && (target.bio.includes('女友') || target.bio.includes('男友'))) {
-                        if (Math.random() < 0.3) {
-                            setTimeout(function() {
-                                if (!chatHistory[char.name]) chatHistory[char.name] = [];
-                                chatHistory[char.name].push({
-                                    text: '？？？你怎么给' + target.name + '发消息？',
-                                    type: 'ai',
-                                    time: Date.now()
-                                });
-                                chatHistory[char.name].push({
-                                    text: '不理你了😠',
-                                    type: 'ai',
-                                    time: Date.now() + 1000
-                                });
-                                char.isBlocked = true;
-                                localStorage.setItem('chatCharacters', JSON.stringify(characters));
-                                localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-                                alert('❌ ' + char.name + ' 发现了，生气拉黑你了！');
-                            }, 5000);
-                        }
-                    }
-                    
-                    alert('📧 ' + char.name + ' 用你的号给 ' + target.name + ' 发了消息');
-                }
-            } else if (action === 1) {
-                if (!momentsData.posts) momentsData.posts = [];
-                momentsData.posts.push({
-                    id: 'post_' + Date.now(),
-                    author: 'user',
-                    content: char.name + '：偷偷用TA手机发的😎',
-                    images: [],
-                    time: Date.now(),
-                    likes: [],
-                    comments: []
-                });
-                localStorage.setItem('momentsData', JSON.stringify(momentsData));
-                alert('📝 ' + char.name + ' 用你的号发了条动态');
-            } else {
-                var amount = Math.floor(Math.random() * 500) + 100;
-                walletData.balance += amount;
-                walletData.transactions.push({
-                    type: 'in',
-                    amount: amount,
-                    source: 'system',
-                    note: char.name + ' 充值',
-                    time: Date.now()
-                });
-                saveWalletData();
-                alert('💰 ' + char.name + ' 给你充了 ¥' + amount);
-            }
-            
-            setTimeout(function() { location.reload(); }, 1000);
-        }, 3000);
-    };
     
     console.log('App initialized successfully');
 
-    console.log('App initialized successfully');
-    
     // 绑定日历签到点击事件
     var calendarWidget = document.getElementById('calendarWidget');
     if (calendarWidget) {
@@ -10437,272 +10200,6 @@ document.getElementById('closeCheckinModal').onclick = function() {
 // 初始化时更新签到指示器
 setTimeout(updateCheckinIndicator, 100);
 
-// ========== 核心修复：callRealAPI 函数 ==========
-async function callRealAPI(userText, image) {
-    if (!currentActiveChar) {
-        console.error('callRealAPI: 没有当前活动角色');
-        return;
-    }
-
-    if (currentActiveChar.isBlocked) {
-        alert(currentActiveChar.name + ' 已被拉黑，无法发送消息');
-        return;
-    }
-
-    if (!apiConfig.url || !apiConfig.key) {
-        alert('请先在底部导航栏的 API 按钮中配置 API 地址和密钥');
-        return;
-    }
-
-    // 构建API地址 - 核心修复：正确拼接URL
-    var endpoint = apiConfig.url.trim().replace(/\/+$/, '');
-    endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '');
-    endpoint = endpoint.replace(/\/v1\/models$/, '');
-    endpoint = endpoint.replace(/\/v1$/, '');
-    endpoint = endpoint + '/v1/chat/completions';
-
-    console.log('🔗 API请求地址:', endpoint);
-    console.log('🤖 使用模型:', apiConfig.model);
-
-    // 构建消息历史
-    var history = chatHistory[currentActiveChar.name] || [];
-    var memoryLimit = currentActiveChar.memoryLimit || 50;
-    var recentHistory = history.slice(-memoryLimit);
-
-    var messages = [];
-
-    // 系统提示词
-    var systemPrompt = generateSystemPrompt(userText || '');
-    messages.push({ role: "system", content: systemPrompt });
-
-    // 添加聊天历史
-    for (var i = 0; i < recentHistory.length; i++) {
-        var msg = recentHistory[i];
-        if (msg.recalled) continue;
-
-        var content = '';
-        if (msg.text && msg.text.trim() !== '') {
-            content = msg.text;
-        } else if (msg.sticker) {
-            content = '[发送了一个表情]';
-        } else if (msg.image) {
-            content = '[发送了一张图片]';
-        } else if (msg.voice && msg.voice.text) {
-            content = msg.voice.text;
-        } else if (msg.location) {
-            content = '[发送了定位: ' + (msg.location.name || '未知位置') + ']';
-        } else if (msg.game) {
-            content = '[猜拳: ' + msg.game.userChoice + ' vs ' + msg.game.aiChoice + ']';
-        } else if (msg.transfer) {
-            content = '[转账 ' + msg.transfer.amount + '元]';
-        } else if (msg.poke) {
-            content = '[戳一戳]';
-        } else {
-            continue;
-        }
-
-        if (!content || content.trim() === '') continue;
-
-        var role = (msg.type === 'user') ? 'user' : 'assistant';
-        messages.push({ role: role, content: content });
-    }
-
-    // 添加当前用户消息
-    if (image && (image.startsWith('http') || image.startsWith('data:image'))) {
-        messages.push({
-            role: "user",
-            content: [
-                { type: "text", text: userText || "请看这张图片" },
-                { type: "image_url", image_url: { url: image } }
-            ]
-        });
-    } else {
-        messages.push({ role: "user", content: userText || '' });
-    }
-
-    // 显示正在输入
-    showTypingIndicator();
-
-    try {
-        console.log('📤 发送API请求...');
-
-        var requestBody = {
-            model: apiConfig.model || 'gpt-3.5-turbo',
-            messages: messages,
-            max_tokens: 1000,
-            temperature: 0.8
-        };
-
-        var response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + apiConfig.key
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        console.log('📥 响应状态:', response.status);
-
-        if (!response.ok) {
-            var errorText = '';
-            try {
-                var errorData = await response.json();
-                errorText = JSON.stringify(errorData);
-            } catch (e) {
-                try { errorText = await response.text(); } catch (e2) { errorText = '无法读取'; }
-            }
-
-            hideTypingIndicator();
-            console.error('❌ API错误:', response.status, errorText.substring(0, 300));
-
-            if (response.status === 401) {
-                showErrorToast('API Key 无效，请检查密钥');
-            } else if (response.status === 404) {
-                showErrorToast('API地址或模型不存在，请检查设置');
-            } else if (response.status === 429) {
-                showErrorToast('请求太频繁，请稍后再试');
-            } else if (response.status >= 500) {
-                showErrorToast('API服务器错误(' + response.status + ')，请稍后重试');
-            } else {
-                showErrorToast('API请求失败: HTTP ' + response.status);
-            }
-            return;
-        }
-
-        var data = await response.json();
-        console.log('✅ API响应成功');
-
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            hideTypingIndicator();
-            console.error('❌ 响应格式异常:', data);
-            showErrorToast('API响应格式异常');
-            return;
-        }
-
-        var aiText = data.choices[0].message.content;
-        console.log('💬 AI回复:', aiText.substring(0, 200));
-
-        if (!aiText || aiText.trim() === '') {
-            hideTypingIndicator();
-            showErrorToast('AI返回了空回复');
-            return;
-        }
-
-        // 处理 [GET_USER_INFO] 标记
-        if (aiText.indexOf('[GET_USER_INFO]') !== -1) {
-            var userInfoStr = generateUserInfoForAI();
-            aiText = aiText.split('[GET_USER_INFO]').join('\n' + userInfoStr + '\n');
-        }
-
-        // 逐条显示消息
-        await showTypingAndMessage(aiText);
-
-    } catch (error) {
-        hideTypingIndicator();
-        console.error('❌ API调用异常:', error);
-
-        if (error.message && error.message.indexOf('Failed to fetch') !== -1) {
-            showErrorToast('无法连接API服务器，请检查API地址和网络');
-        } else {
-            showErrorToast('API调用失败: ' + (error.message || '未知错误'));
-        }
-    }
-}
-
-// 生成用户信息（查手机功能）
-function generateUserInfoForAI() {
-    var userName = momentsData.userName || 'User';
-    var balance = walletData.balance.toFixed(2);
-    var currency = getWalletCurrency();
-    var friendNames = characters.map(function(c) { return c.name; }).join('、');
-
-    var recentChats = '';
-    characters.forEach(function(c) {
-        var hist = chatHistory[c.name] || [];
-        if (hist.length > 0) {
-            var lastMsg = hist[hist.length - 1];
-            recentChats += c.name + '(最近:' + (lastMsg.text || '[媒体]').substring(0, 30) + ')\n';
-        }
-    });
-
-    var persona = userPersonas.find(function(p) { return p.id === currentPersonaId; });
-    var personaInfo = persona ? '人设:' + persona.name : '未设置人设';
-    var postCount = (momentsData.posts || []).length;
-
-    return '【用户手机信息】\n昵称:' + userName + '\n' + personaInfo + '\n余额:' + currency.symbol + balance + '\n好友:' + friendNames + '\n动态:' + postCount + '条\n' + recentChats;
-}
-
-// 动态可见性检查
-function checkMomentVisibility(post, charName) {
-    if (!post.visibility || post.visibility === 'public') return true;
-    if (post.visibility === 'private') return false;
-    if (post.visibility === 'selected') return (post.visibleTo || []).includes(charName);
-    if (post.visibility === 'excluded') return !(post.excludedFrom || []).includes(charName);
-    return true;
-}
-
-// AI生成动态评论
-async function generateAiMomentComment(post, char) {
-    if (!apiConfig.url || !apiConfig.key) return null;
-    try {
-        var ep = apiConfig.url.trim().replace(/\/+$/, '');
-        ep = ep.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1\/models$/, '').replace(/\/v1$/, '');
-        ep = ep + '/v1/chat/completions';
-
-        var prompt = '你是' + char.name + '。人设:' + (char.bio || '').substring(0, 100) + '。看到动态:' + (post.content || '').substring(0, 100) + '。写一条简短评论(10-30字)，只输出评论。';
-
-        var resp = await fetch(ep, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiConfig.key },
-            body: JSON.stringify({ model: apiConfig.model || 'gpt-3.5-turbo', messages: [{ role: 'user', content: prompt }], max_tokens: 80 })
-        });
-        if (!resp.ok) return null;
-        var d = await resp.json();
-        return (d.choices && d.choices[0] && d.choices[0].message) ? d.choices[0].message.content.trim() : null;
-    } catch (e) { return null; }
-}
-
-// ========== Twitter/X 功能 ==========
-var twitterData = JSON.parse(localStorage.getItem('twitterData') || '{"tweets":[]}');
-
-function openTwitterModal() {
-    renderTwitterTimeline();
-    openM(document.getElementById('twitterModal'));
-}
-
-function renderTwitterTimeline() {
-    var timeline = document.getElementById('twitterTimeline');
-    if (!timeline) return;
-    var tweets = twitterData.tweets || [];
-    if (tweets.length === 0) {
-        timeline.innerHTML = '<div style="padding:40px;text-align:center;color:#888;">暂无推文</div>';
-        return;
-    }
-    timeline.innerHTML = tweets.sort(function(a, b) { return b.time - a.time; }).map(function(tweet) {
-        var timeStr = formatMomentTime(tweet.time);
-        var isLiked = tweet.liked || false;
-        return '<div class="tweet-item"><img class="tweet-avatar" src="' + (tweet.avatar || '') + '"><div class="tweet-main"><div class="tweet-header"><span class="tweet-name">' + (tweet.name || 'User') + '</span><span class="tweet-handle">@' + (tweet.name || 'user').toLowerCase().replace(/\s/g, '') + '</span><span class="tweet-time">· ' + timeStr + '</span></div><div class="tweet-text">' + (tweet.text || '') + '</div>' + (tweet.image ? '<img class="tweet-img" src="' + tweet.image + '">' : '') + '<div class="tweet-actions"><div class="tweet-action-btn ' + (isLiked ? 'liked' : '') + '" onclick="toggleTweetLike(\'' + tweet.id + '\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="' + (isLiked ? '#f91880' : 'none') + '" stroke="' + (isLiked ? '#f91880' : 'currentColor') + '" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg><span>' + (tweet.likes || 0) + '</span></div><div class="tweet-action-btn" onclick="deleteTweet(\'' + tweet.id + '\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg></div></div></div></div>';
-    }).join('');
-}
-
-window.toggleTweetLike = function(tweetId) {
-    var tweet = twitterData.tweets.find(function(t) { return t.id === tweetId; });
-    if (!tweet) return;
-    tweet.liked = !tweet.liked;
-    tweet.likes = (tweet.likes || 0) + (tweet.liked ? 1 : -1);
-    localStorage.setItem('twitterData', JSON.stringify(twitterData));
-    renderTwitterTimeline();
-};
-
-window.deleteTweet = function(tweetId) {
-    if (!confirm('删除这条推文？')) return;
-    twitterData.tweets = twitterData.tweets.filter(function(t) { return t.id !== tweetId; });
-    localStorage.setItem('twitterData', JSON.stringify(twitterData));
-    renderTwitterTimeline();
-};
-
-// ========== 结束核心修复 ==========
 
 console.log('%c黑白小机 Pro Max v2', 'font-size: 20px; font-weight: bold; color: #000;');
 console.log('%c一个简约的AI聊天应用', 'font-size: 12px; color: #888;');// ========== 有趣功能：摇一摇随机换背景 ==========
@@ -10959,7 +10456,7 @@ async function callRealAPI(userText, image = null) {
 
         // 使用 showTypingAndMessage 来逐条显示消息
         await showTypingAndMessage(aiText);
-
+checkAiTakeover(aiText, currentActiveChar);
     } catch (error) {
         hideTypingIndicator();
         console.error('❌ API调用异常:', error);
@@ -11177,487 +10674,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// ========== 结束核心修复 ==========
-
-// ========== 核心修复：callRealAPI 函数 ==========
-async function callRealAPI(userText, image = null) {
-    if (!currentActiveChar) {
-        console.error('callRealAPI: 没有当前活动角色');
-        return;
-    }
-    
-    if (currentActiveChar.isBlocked) {
-        alert(currentActiveChar.name + ' 已被拉黑，无法发送消息');
-        return;
-    }
-
-    if (!apiConfig.url || !apiConfig.key) {
-        alert('请先在底部导航栏的 API 按钮中配置 API 地址和密钥');
-        return;
-    }
-
-    // 构建API地址
-    let endpoint = apiConfig.url.trim().replace(/\/+$/, '');
-    // 移除可能已存在的路径后缀，避免重复拼接
-    endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1\/models$/, '').replace(/\/v1$/, '');
-    endpoint = endpoint + '/v1/chat/completions';
-    
-    console.log('🔗 API请求地址:', endpoint);
-    console.log('🤖 使用模型:', apiConfig.model);
-
-    // 构建消息历史
-    const history = chatHistory[currentActiveChar.name] || [];
-    const memoryLimit = currentActiveChar.memoryLimit || 50;
-    const recentHistory = history.slice(-memoryLimit);
-
-    const messages = [];
-
-    // 系统提示词
-    const systemPrompt = generateSystemPrompt(userText);
-    messages.push({ role: "system", content: systemPrompt });
-
-    // 添加聊天历史
-    recentHistory.forEach((msg, index) => {
-        if (msg.recalled) return; // 跳过已撤回的消息
-        
-        let content = '';
-        if (msg.text) {
-            content = msg.text;
-        } else if (msg.sticker) {
-            content = '[发送了一个表情]';
-        } else if (msg.image) {
-            content = '[发送了一张图片]';
-        } else if (msg.voice) {
-            content = msg.voice.text || '[发送了一段语音]';
-        } else if (msg.location) {
-            content = '[发送了定位: ' + (msg.location.name || '未知位置') + ']';
-        } else if (msg.game) {
-            content = '[猜拳游戏: ' + msg.game.userChoice + ' vs ' + msg.game.aiChoice + ']';
-        } else if (msg.transfer) {
-            content = '[转账 ' + msg.transfer.amount + '元]';
-        } else if (msg.poke) {
-            content = msg.text || '[戳一戳]';
-        } else {
-            content = '[消息]';
-        }
-
-        if (!content || content.trim() === '') return;
-
-        const role = msg.type === 'user' ? 'user' : 'assistant';
-        
-        // 修复图片格式：如果是最后一条用户消息且带有图片，应用 Vision 格式
-        if (index === recentHistory.length - 1 && role === 'user' && image && (image.startsWith('http') || image.startsWith('data:image'))) {
-            messages.push({
-                role: "user",
-                content: [
-                    { type: "text", text: content },
-                    { type: "image_url", image_url: { url: image } }
-                ]
-            });
-        } else {
-            messages.push({ role: role, content: content });
-        }
-    });
-
-    // --- 核心修复：防止发送重复消息导致AI错乱前言不搭后语 ---
-    // 由于发送消息时已经存入了 history，这里判断如果不重复才额外追加特殊指令
-    const lastMsgContent = messages.length > 0 ? messages[messages.length - 1].content : '';
-    let isDuplicate = false;
-    
-    if (typeof lastMsgContent === 'string' && lastMsgContent.includes(userText)) {
-        isDuplicate = true;
-    } else if (Array.isArray(lastMsgContent) && lastMsgContent[0] && lastMsgContent[0].text && lastMsgContent[0].text.includes(userText)) {
-        isDuplicate = true;
-    }
-    
-    // 只有非重复消息(比如点击头像主动发话的系统指令)才再次 push
-    if (!isDuplicate && userText) {
-        messages.push({ role: "user", content: userText });
-    }
-    
-    // --- 核心修复：强制追加人设约束，解决聊多了崩人设的问题 ---
-    messages.push({ role: "system", content: "【系统强提醒】请务必牢记你的角色设定，紧贴刚才的上下文进行自然、连贯的回复，绝对不要脱离人设！" });
-
-    // 显示正在输入指示器
-    showTypingIndicator();
-
-    try {
-        console.log('📤 发送API请求...');
-        
-        const requestBody = {
-            model: apiConfig.model || 'gpt-3.5-turbo',
-            messages: messages,
-            max_tokens: 1000,
-            temperature: 0.8
-        };
-        
-        console.log('📋 请求体:', JSON.stringify(requestBody).substring(0, 500) + '...');
-        
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + apiConfig.key
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        console.log('📥 响应状态:', response.status);
-
-        if (!response.ok) {
-            let errorText = '';
-            try {
-                const errorData = await response.json();
-                errorText = JSON.stringify(errorData);
-                console.error('❌ API错误详情:', errorData);
-            } catch (e) {
-                errorText = await response.text().catch(() => '无法读取错误信息');
-            }
-            
-            hideTypingIndicator();
-            
-            if (response.status === 401) {
-                showErrorToast('API Key 无效，请检查密钥设置');
-            } else if (response.status === 404) {
-                showErrorToast('API地址或模型不存在，请检查设置。当前地址: ' + endpoint);
-            } else if (response.status === 429) {
-                showErrorToast('API调用频率过高，请稍后再试');
-            } else if (response.status === 500 || response.status === 502 || response.status === 503) {
-                showErrorToast('API服务器错误（' + response.status + '），请稍后重试');
-            } else {
-                showErrorToast('API请求失败: HTTP ' + response.status);
-            }
-            
-            console.error('API请求失败:', response.status, errorText.substring(0, 300));
-            return;
-        }
-
-        const data = await response.json();
-        console.log('✅ API响应成功');
-        
-        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-            console.error('❌ API响应格式异常:', data);
-            hideTypingIndicator();
-            showErrorToast('API响应格式异常，请检查模型设置');
-            return;
-        }
-
-        let aiText = data.choices[0].message.content;
-        console.log('💬 AI回复:', aiText.substring(0, 200) + '...');
-
-        if (!aiText || aiText.trim() === '') {
-            hideTypingIndicator();
-            showErrorToast('AI返回了空回复');
-            return;
-        }
-        
-        // 处理 [GET_USER_INFO] 标记 - 查手机功能
-        if (aiText.includes('[GET_USER_INFO]')) {
-            const userInfo = generateUserInfoForAI();
-            aiText = aiText.replace(/\[GET_USER_INFO\]/g, '\n' + userInfo + '\n');
-        }
-
-        // 使用 showTypingAndMessage 来逐条显示消息
-        await showTypingAndMessage(aiText);
-
-    } catch (error) {
-        hideTypingIndicator();
-        console.error('❌ API调用异常:', error);
-        
-        if (error.message && error.message.includes('Failed to fetch')) {
-            showErrorToast('无法连接API服务器，请检查：\n1. API地址是否正确\n2. 网络是否正常\n3. 是否存在跨域限制');
-        } else if (error.message && error.message.includes('NetworkError')) {
-            showErrorToast('网络错误，请检查网络连接');
-        } else {
-            showErrorToast('API调用失败: ' + (error.message || '未知错误'));
-        }
-    }
-}
-
-// 生成用户信息（供AI查手机功能使用）
-function generateUserInfoForAI() {
-    const userName = momentsData.userName || 'User';
-    const balance = walletData.balance.toFixed(2);
-    const currency = getWalletCurrency();
-    const friendCount = characters.length;
-    const friendNames = characters.map(c => c.name).join('、');
-    
-    // 获取最近的聊天摘要
-    let recentChats = '';
-    characters.forEach(c => {
-        const hist = chatHistory[c.name] || [];
-        if (hist.length > 0) {
-            const lastMsg = hist[hist.length - 1];
-            recentChats += c.name + '（最近消息：' + (lastMsg.text || '[媒体]').substring(0, 30) + '）\n';
-        }
-    });
-    
-    // 获取当前人设
-    const persona = userPersonas.find(p => p.id === currentPersonaId);
-    const personaInfo = persona ? '当前人设：' + persona.name + (persona.gender ? '，' + persona.gender : '') : '未设置人设';
-    
-    // 动态数量
-    const postCount = (momentsData.posts || []).length;
-    
-    return `【用户手机信息】
-昵称：${userName}
-${personaInfo}
-钱包余额：${currency.symbol}${balance}
-好友数：${friendCount}人（${friendNames}）
-动态数：${postCount}条
-最近聊天：
-${recentChats || '暂无聊天记录'}`;
-}
-
-// 动态可见性检查函数
-function checkMomentVisibility(post, charName) {
-    if (!post.visibility || post.visibility === 'public') return true;
-    if (post.visibility === 'private') return false;
-    if (post.visibility === 'selected') {
-        return (post.visibleTo || []).includes(charName);
-    }
-    if (post.visibility === 'excluded') {
-        return !(post.excludedFrom || []).includes(charName);
-    }
-    return true;
-}
-
-// AI生成动态评论
-async function generateAiMomentComment(post, char) {
-    if (!apiConfig.url || !apiConfig.key) return null;
-    
-    try {
-        let endpoint = apiConfig.url.trim().replace(/\/+$/, '');
-        endpoint = endpoint.replace(/\/v1\/chat\/completions$/, '').replace(/\/v1\/models$/, '').replace(/\/v1$/, '');
-        endpoint = endpoint + '/v1/chat/completions';
-        
-        const prompt = `你是${char.name}，${char.gender || ''}。人设：${(char.bio || '').substring(0, 100)}。
-看到一条动态：${(post.content || '').substring(0, 100)}
-请写一条简短的评论（10-30字），符合你的性格。只输出评论内容。`;
-        
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + apiConfig.key
-            },
-            body: JSON.stringify({
-                model: apiConfig.model || 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: 80
-            })
-        });
-        
-        if (!response.ok) return null;
-        const data = await response.json();
-        return data.choices[0]?.message?.content?.trim() || null;
-    } catch (e) {
-        console.error('AI评论生成失败:', e);
-        return null;
-    }
-}
-
-// ========== Twitter/X 功能 ==========
-let twitterData = JSON.parse(localStorage.getItem('twitterData') || '{"tweets":[]}');
-
-function openTwitterModal() {
-    renderTwitterTimeline();
-    openM(document.getElementById('twitterModal'));
-}
-
-function renderTwitterTimeline() {
-    const timeline = document.getElementById('twitterTimeline');
-    if (!timeline) return;
-    
-    const tweets = twitterData.tweets || [];
-    
-    if (tweets.length === 0) {
-        timeline.innerHTML = '<div style="padding:40px; text-align:center; color:#888;">暂无推文<br><small>点击右上角"发推"按钮发布</small></div>';
-        return;
-    }
-    
-    timeline.innerHTML = tweets.sort((a, b) => b.time - a.time).map(tweet => {
-        const timeStr = formatMomentTime(tweet.time);
-        const isLiked = tweet.liked || false;
-        
-        return `
-            <div class="tweet-item">
-                <img class="tweet-avatar" src="${tweet.avatar || ''}" alt="">
-                <div class="tweet-main">
-                    <div class="tweet-header">
-                        <span class="tweet-name">${tweet.name || 'User'}</span>
-                        <span class="tweet-handle">@${(tweet.name || 'user').toLowerCase().replace(/\s/g, '')}</span>
-                        <span class="tweet-time">· ${timeStr}</span>
-                    </div>
-                    <div class="tweet-text">${tweet.text || ''}</div>
-                    ${tweet.image ? '<img class="tweet-img" src="' + tweet.image + '">' : ''}
-                    <div class="tweet-actions">
-                        <div class="tweet-action-btn" onclick="toggleTweetLike('${tweet.id}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="${isLiked ? '#f91880' : 'none'}" stroke="${isLiked ? '#f91880' : 'currentColor'}" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                            <span>${tweet.likes || 0}</span>
-                        </div>
-                        <div class="tweet-action-btn" onclick="deleteTweet('${tweet.id}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-window.toggleTweetLike = function(tweetId) {
-    const tweet = twitterData.tweets.find(t => t.id === tweetId);
-    if (!tweet) return;
-    tweet.liked = !tweet.liked;
-    tweet.likes = (tweet.likes || 0) + (tweet.liked ? 1 : -1);
-    localStorage.setItem('twitterData', JSON.stringify(twitterData));
-    renderTwitterTimeline();
-};
-
-window.deleteTweet = function(tweetId) {
-    if (!confirm('删除这条推文？')) return;
-    twitterData.tweets = twitterData.tweets.filter(t => t.id !== tweetId);
-    localStorage.setItem('twitterData', JSON.stringify(twitterData));
-    renderTwitterTimeline();
-};
-
-// Twitter 按钮事件绑定
-document.addEventListener('DOMContentLoaded', function() {
-    // 关闭Twitter
-    var closeTwitterBtns = document.querySelectorAll('#closeTwitterModal');
-    closeTwitterBtns.forEach(function(btn) {
-        btn.onclick = function() { closeM(document.getElementById('twitterModal')); };
-    });
-    
-    // 打开发推
-    var openPostBtns = document.querySelectorAll('#openPostTweetModal');
-    openPostBtns.forEach(function(btn) {
-        btn.onclick = function() {
-            document.getElementById('tweetContentInput').value = '';
-            document.getElementById('tweetImgUrlInput').value = '';
-            var avatarEl = document.getElementById('twitUserAvatar');
-            if (avatarEl) {
-                avatarEl.src = momentsData.userAvatar || localStorage.getItem('cdAvatar') || '';
-            }
-            openM(document.getElementById('postTweetModal'));
-        };
-    });
-    
-    // 取消发推
-    var cancelBtns = document.querySelectorAll('#cancelPostTweet');
-    cancelBtns.forEach(function(btn) {
-        btn.onclick = function() { closeM(document.getElementById('postTweetModal')); };
-    });
-    
-    // 确认发推
-    var confirmBtns = document.querySelectorAll('#confirmPostTweet');
-    confirmBtns.forEach(function(btn) {
-        btn.onclick = function() {
-            var text = document.getElementById('tweetContentInput').value.trim();
-            var imgUrl = document.getElementById('tweetImgUrlInput').value.trim();
-            if (!text && !imgUrl) { alert('请输入内容'); return; }
-            
-            var tweet = {
-                id: 'tweet_' + Date.now(),
-                name: momentsData.userName || 'User',
-                avatar: momentsData.userAvatar || localStorage.getItem('cdAvatar') || '',
-                text: text,
-                image: imgUrl || null,
-                time: Date.now(),
-                likes: 0,
-                liked: false
-            };
-            
-            twitterData.tweets.push(tweet);
-            localStorage.setItem('twitterData', JSON.stringify(twitterData));
-            closeM(document.getElementById('postTweetModal'));
-            renderTwitterTimeline();
-        };
-    });
-});
-
-// ========== 结束核心修复 ==========
-
-document.addEventListener("DOMContentLoaded", function () {
-
-  console.log("✅ 下拉按钮最终强制版加载");
-
-  const clearBtn = document.getElementById("clearAllDataBtn");
-  const exportBtn = document.getElementById("exportBackupBtn");
-  const importBtn = document.getElementById("importBackupBtn");
-  const fileInput = document.getElementById("importBackupFile");
-
-  // ===== 清空 =====
-  if (clearBtn) {
-    clearBtn.onclick = function () {
-      if (!confirm("确定清空所有数据？")) return;
-      if (!confirm("真的要清空吗？不可恢复！")) return;
-
-      localStorage.clear();
-      sessionStorage.clear();
-      alert("已清空，页面即将刷新");
-      location.reload();
-    };
-  }
-
-  // ===== 导出 =====
-  if (exportBtn) {
-    exportBtn.onclick = function () {
-      const data = {};
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        data[key] = localStorage.getItem(key);
-      }
-
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json"
-      });
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "黑白小机备份.json";
-      a.click();
-      URL.revokeObjectURL(url);
-
-      alert("备份已导出");
-    };
-  }
-
-  // ===== 导入 =====
-  if (importBtn && fileInput) {
-    importBtn.onclick = function () {
-      fileInput.click();
-    };
-
-    fileInput.onchange = function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function (evt) {
-        try {
-          const data = JSON.parse(evt.target.result);
-          if (!confirm("确定导入？会覆盖当前数据")) return;
-
-          for (const key in data) {
-            localStorage.setItem(key, data[key]);
-          }
-
-          alert("导入成功，刷新页面");
-          location.reload();
-        } catch (err) {
-          alert("文件解析失败");
-        }
-      };
-
-      reader.readAsText(file);
-    };
-  }
-
-});
-</script
 
 
 
