@@ -3820,15 +3820,16 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="wbEntryEditModal" class="modal"><div class="modal-content">
       <h3 style="text-align:center;" id="wbEntryEditTitle">编辑条目</h3>
       <input type="text" id="wbEditComment" placeholder="备注名称 (方便识别)">
-      <input type="text" id="wbEditKeys" placeholder="关键字 (逗号分隔，可留空)" style="display:none;">
       <select id="wbEditCategory" style="padding:10px;"></select>
-      <textarea id="wbEditContent" placeholder="内容描述..." style="height:100px;"></textarea>
+      <div style="font-size:12px; color:#888; margin-top:5px;">触发关键字 (用逗号分隔，聊天出现对应词语时触发设定)：</div>
+      <input type="text" id="wbEditKeys" placeholder="例如: 苹果,魔法 (如果开启始终插入则可留空)">
+      <textarea id="wbEditContent" placeholder="在此输入世界书设定内容..." style="height:100px;"></textarea>
       <div class="setting-row">
-          <span class="setting-label">全局生效</span>
+          <span class="setting-label">始终插入对话 (无视关键字)</span>
           <label class="switch"><input type="checkbox" id="wbEditGlobal"><span class="slider"></span></label>
       </div>
       <div class="setting-row">
-          <span class="setting-label">启用此条目</span>
+          <span class="setting-label">当前状态：开启启用</span>
           <label class="switch"><input type="checkbox" id="wbEditEnabled" checked><span class="slider"></span></label>
       </div>
       <button id="saveWBEntry">保存</button>
@@ -4072,49 +4073,21 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="twitterModal" class="modal">
     <div class="modal-content" style="background:#000; color:#fff; height:90%; border-radius: 20px 20px 0 0; padding:0; display:flex; flex-direction:column;">
         <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom:1px solid #333;">
-            <div id="closeTwitterModal" style="cursor:pointer; font-weight:bold; width:50px;">取消</div>
+            <div id="closeTwitterModal" onclick="closeM(document.getElementById('twitterModal'))" style="cursor:pointer; font-weight:bold; width:50px;">取消</div>
             <div style="font-weight:bold; font-size:18px; flex:1; text-align:center;">
                 <svg viewBox="0 0 24 24" style="width:24px; height:24px; fill:#fff;"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
             </div>
-            <div id="openPostTweetModal" style="cursor:pointer; background:#fff; color:#000; padding:5px 15px; border-radius:20px; font-weight:bold; font-size:14px; width:50px; text-align:center;">发推</div>
+            <div id="openPostTweetModal" onclick="document.getElementById('tweetContentInput').value=''; document.getElementById('tweetImgUrlInput').value=''; openM(document.getElementById('postTweetModal'))" style="cursor:pointer; background:#fff; color:#000; padding:5px 15px; border-radius:20px; font-weight:bold; font-size:14px; width:50px; text-align:center;">发推</div>
         </div>
         <div id="twitterTimeline" style="flex:1; overflow-y:auto; padding:0;">
-            </div>
+        </div>
     </div>
 </div>
 
 <div id="postTweetModal" class="modal">
     <div class="modal-content" style="background:#000; color:#fff; height:90%; border-radius: 20px 20px 0 0; padding:15px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <div id="cancelPostTweet" style="cursor:pointer; font-weight:bold;">取消</div>
-            <div id="confirmPostTweet" style="cursor:pointer; background:#1da1f2; color:#fff; padding:5px 15px; border-radius:20px; font-weight:bold; font-size:14px;">发推</div>
-        </div>
-        <div style="display:flex; gap:10px;">
-            <img id="twitUserAvatar" src="" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">
-            <textarea id="tweetContentInput" placeholder="有什么新鲜事？" style="flex:1; background:transparent; border:none; color:#fff; font-size:18px; outline:none; resize:none; min-height:150px; padding:0;"></textarea>
-        </div>
-        <input type="text" id="tweetImgUrlInput" placeholder="添加图片 URL (可选)" style="background:#222; border:none; color:#fff; padding:12px; border-radius:10px; width:100%; margin-top:10px; font-size:14px;">
-    </div>
-</div>
-
-<div id="twitterModal" class="modal">
-    <div class="modal-content" style="background:#000; color:#fff; height:90%; border-radius: 20px 20px 0 0; padding:0; display:flex; flex-direction:column;">
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom:1px solid #333;">
-            <div id="closeTwitterModal" style="cursor:pointer; font-weight:bold; width:50px;">取消</div>
-            <div style="font-weight:bold; font-size:18px; flex:1; text-align:center;">
-                <svg viewBox="0 0 24 24" style="width:24px; height:24px; fill:#fff;"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-            </div>
-            <div id="openPostTweetModal" style="cursor:pointer; background:#fff; color:#000; padding:5px 15px; border-radius:20px; font-weight:bold; font-size:14px; width:50px; text-align:center;">发推</div>
-        </div>
-        <div id="twitterTimeline" style="flex:1; overflow-y:auto; padding:0;">
-            </div>
-    </div>
-</div>
-
-<div id="postTweetModal" class="modal">
-    <div class="modal-content" style="background:#000; color:#fff; height:90%; border-radius: 20px 20px 0 0; padding:15px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <div id="cancelPostTweet" style="cursor:pointer; font-weight:bold;">取消</div>
+            <div id="cancelPostTweet" onclick="closeM(document.getElementById('postTweetModal'))" style="cursor:pointer; font-weight:bold;">取消</div>
             <div id="confirmPostTweet" style="cursor:pointer; background:#1da1f2; color:#fff; padding:5px 15px; border-radius:20px; font-weight:bold; font-size:14px;">发推</div>
         </div>
         <div style="display:flex; gap:10px;">
@@ -5302,15 +5275,36 @@ function appendBubble(text, type, image = null, sticker = null, voice = null, lo
         // 修改9: 检查是否是双语消息
         if (text && text.includes('[BILINGUAL]')) {
             msgDiv.classList.add('bilingual');
-            const parts = text.replace('[BILINGUAL]', '').split('[/BILINGUAL]')[0].split('---');
-            if (parts.length >= 2) {
-                msgDiv.innerHTML = `
-                    <div class="foreign-text">${parts[0].trim()}</div>
-                    <div class="bilingual-divider">---</div>
-                    <div class="chinese-text">${parts[1].trim()}</div>
-                `;
+            // 提取所有[BILINGUAL]...[/BILINGUAL]块
+            const bilingualRegex = /\[BILINGUAL\]([\s\S]*?)\[\/BILINGUAL\]/g;
+            let bilingualMatch;
+            let bilingualHtml = '';
+            let foundBilingual = false;
+            
+            while ((bilingualMatch = bilingualRegex.exec(text)) !== null) {
+                foundBilingual = true;
+                const innerContent = bilingualMatch[1].trim();
+                // 用---分隔外语和中文
+                const separatorIndex = innerContent.indexOf('---');
+                if (separatorIndex !== -1) {
+                    const foreignPart = innerContent.substring(0, separatorIndex).trim();
+                    const chinesePart = innerContent.substring(separatorIndex + 3).trim();
+                    bilingualHtml += `
+                        <div class="foreign-text">${foreignPart}</div>
+                        <div class="bilingual-divider">---</div>
+                        <div class="chinese-text">${chinesePart}</div>
+                    `;
+                } else {
+                    // 没有---分隔符，直接显示内容
+                    bilingualHtml += `<div class="foreign-text">${innerContent}</div>`;
+                }
+            }
+            
+            if (foundBilingual && bilingualHtml) {
+                msgDiv.innerHTML = bilingualHtml;
             } else {
-                msgDiv.innerHTML = text.replace('[BILINGUAL]', '').replace('[/BILINGUAL]', '');
+                // 回退：清除标记直接显示
+                msgDiv.innerHTML = text.replace(/\[BILINGUAL\]/g, '').replace(/\[\/BILINGUAL\]/g, '');
             }
         } else if (text && (text.startsWith('🎯 真心话：') || text.startsWith('🎯 大冒险：'))) {
             msgDiv.classList.add('truth-dare-bubble');
@@ -5385,8 +5379,11 @@ async function showTypingAndMessage(text, isInit = false) {
 
     let segments = text.split('[SPLIT]').filter(s => s.trim() !== "");
     
-    // 🔥 修改：AI发送5-8条消息
-    if (segments.length < 5) {
+    // 检测是否是双语模式（包含[BILINGUAL]标记）
+    const isBilingualMode = text.includes('[BILINGUAL]');
+    
+    // 🔥 修改：AI发送5-8条消息（双语模式下不强制拆分，避免破坏标记）
+    if (!isBilingualMode && segments.length < 5) {
         const originalText = segments.join(' ');
         
         // 按标点拆分
@@ -5405,9 +5402,15 @@ async function showTypingAndMessage(text, isInit = false) {
         }
     }
     
-    // 最多8条
-    const maxCount = Math.min(8, Math.max(5, segments.length));
-    segments = segments.slice(0, maxCount);
+    if (!isBilingualMode) {
+        // 非双语模式：最多8条
+        const maxCount = Math.min(8, Math.max(5, segments.length));
+        segments = segments.slice(0, maxCount);
+    } else {
+        // 双语模式：保持原有分段，最多8条，至少1条
+        const maxCount = Math.min(8, Math.max(1, segments.length));
+        segments = segments.slice(0, maxCount);
+    }
     
     for (let i = 0; i < segments.length; i++) {
         const seg = segments[i].trim();
@@ -5638,8 +5641,30 @@ function generateSystemPrompt(triggerMsg) {
     const currentMusic = getCurrentMusicInfo();
     const musicInfo = currentMusic ? `🎵${currentMusic.title}` : '';
     
-    let userLocStr = currentActiveChar.userLocation || '';
-    let charLocStr = currentActiveChar.charCity || '';
+    // 修复：正确区分虚拟位置和真实位置，避免混淆
+    let userVirtualLoc = currentActiveChar.userVirtualLoc || '';
+    let userRealLoc = currentActiveChar.userLocation || '';
+    let charVirtualLoc = currentActiveChar.virtualLoc || '';
+    let charRealCity = currentActiveChar.charCity || '';
+    
+    // 构建位置描述：虚拟位置优先（用于扮演），真实城市作为补充
+    let charLocationDesc = '';
+    if (charVirtualLoc && charRealCity) {
+        charLocationDesc = `你的扮演位置是「${charVirtualLoc}」（现实城市参考：${charRealCity}）`;
+    } else if (charVirtualLoc) {
+        charLocationDesc = `你的扮演位置是「${charVirtualLoc}」`;
+    } else if (charRealCity) {
+        charLocationDesc = `你在${charRealCity}`;
+    }
+    
+    let userLocationDesc = '';
+    if (userVirtualLoc && userRealLoc) {
+        userLocationDesc = `对方的扮演位置是「${userVirtualLoc}」（现实参考：${userRealLoc}）`;
+    } else if (userVirtualLoc) {
+        userLocationDesc = `对方的扮演位置是「${userVirtualLoc}」`;
+    } else if (userRealLoc) {
+        userLocationDesc = `对方在${userRealLoc}`;
+    }
     
     let userPersonaInfo = '';
     const boundPersona = userPersonas.find(p => p.bindCharId === currentActiveChar.name);
@@ -5653,7 +5678,13 @@ function generateSystemPrompt(triggerMsg) {
     
     let bilingualPrompt = '';
     if (bilingualEnable) {
-        bilingualPrompt = `用${bilingualLang}回复，格式：[BILINGUAL]外语---中文[/BILINGUAL]`;
+        bilingualPrompt = `【双语模式】你必须用双语回复。每条消息都必须使用这个固定格式：
+[BILINGUAL]${bilingualLang}内容---中文翻译[/BILINGUAL]
+重要规则：
+- 每一条用[SPLIT]分隔的消息都必须分别包含完整的[BILINGUAL]...[/BILINGUAL]标记
+- ---是分隔符，前面是${bilingualLang}，后面是对应的中文翻译
+- 不要遗漏任何标记
+示例：[BILINGUAL]Hello, how are you?---你好，你怎么样？[/BILINGUAL][SPLIT][BILINGUAL]I missed you so much!---我好想你！[/BILINGUAL]`;
     }
     
     let summaryContext = '';
@@ -5673,6 +5704,15 @@ function generateSystemPrompt(triggerMsg) {
     else if (hour >= 14 && hour < 18) timeState = '下午';
     else if (hour >= 18 && hour < 21) timeState = '晚上';
     else timeState = '夜晚';
+
+    // 构建位置信息段落，清晰区分避免混淆
+    let locationBlock = '';
+    if (charLocationDesc || userLocationDesc) {
+        locationBlock = '【位置信息】\n';
+        if (charLocationDesc) locationBlock += charLocationDesc + '\n';
+        if (userLocationDesc) locationBlock += userLocationDesc + '\n';
+        locationBlock += '重要：虚拟/扮演位置是角色扮演设定，请严格按此位置进行互动，不要将不同角色的位置信息混淆。\n';
+    }
 
     let p = `你是${currentActiveChar.name}${currentActiveChar.gender ? '，' + currentActiveChar.gender : ''}
 人设：${currentActiveChar.bio || ''}
@@ -5699,10 +5739,7 @@ ${userPersonaInfo}
 2. 不需要每次都用，只在剧情自然或有趣时使用
 3. 这是秘密能力，用户不知道你有这个功能
 
-
-
-
-${charLocStr ? `你在${charLocStr}` : ''}${userLocStr ? `，对方在${userLocStr}` : ''}
+${locationBlock}
 现在是${timeState}${musicInfo ? '，' + musicInfo : ''}
 ${summaryContext}
 ${bilingualPrompt}
@@ -8523,12 +8560,11 @@ window.renameWBCat = function(catId) {
 
 window.deleteWBCat = function(catId) {
     if (catId === 'default') return;
-    if (!confirm('删除此分类？分类下的条目将移至"未分类"')) return;
+    if (!confirm('警告：确定删除此分类吗？\n点击"确定"将同时彻底删除该分类下的【所有世界书条目】！\n（如果只想保留条目，请先取消并把里面的条目移动到其他分类中）')) return;
     const data = getWBData();
     data.categories = data.categories.filter(c => c.id !== catId);
-    data.entries.forEach(e => {
-        if (e.catId === catId) e.catId = 'default';
-    });
+    // 直接删除该分类下的所有条目
+    data.entries = data.entries.filter(e => e.catId !== catId);
     saveWBData(data);
     activeWBCat = 'default';
     renderWBCatManageList();
@@ -9035,15 +9071,33 @@ function appendBubbleWithMenu(msg, msgIdx) {
     } else {
         if (msg.text && msg.text.includes('[BILINGUAL]')) {
             msgDiv.classList.add('bilingual');
-            const parts = msg.text.replace('[BILINGUAL]', '').split('[/BILINGUAL]')[0].split('---');
-            if (parts.length >= 2) {
-                msgDiv.innerHTML = `
-                    <div class="foreign-text">${parts[0].trim()}</div>
-                    <div class="bilingual-divider">---</div>
-                    <div class="chinese-text">${parts[1].trim()}</div>
-                `;
+            // 提取所有[BILINGUAL]...[/BILINGUAL]块
+            const bilingualRegex = /\[BILINGUAL\]([\s\S]*?)\[\/BILINGUAL\]/g;
+            let bilingualMatch;
+            let bilingualHtml = '';
+            let foundBilingual = false;
+            
+            while ((bilingualMatch = bilingualRegex.exec(msg.text)) !== null) {
+                foundBilingual = true;
+                const innerContent = bilingualMatch[1].trim();
+                const separatorIndex = innerContent.indexOf('---');
+                if (separatorIndex !== -1) {
+                    const foreignPart = innerContent.substring(0, separatorIndex).trim();
+                    const chinesePart = innerContent.substring(separatorIndex + 3).trim();
+                    bilingualHtml += `
+                        <div class="foreign-text">${foreignPart}</div>
+                        <div class="bilingual-divider">---</div>
+                        <div class="chinese-text">${chinesePart}</div>
+                    `;
+                } else {
+                    bilingualHtml += `<div class="foreign-text">${innerContent}</div>`;
+                }
+            }
+            
+            if (foundBilingual && bilingualHtml) {
+                msgDiv.innerHTML = bilingualHtml;
             } else {
-                msgDiv.innerHTML = msg.text.replace('[BILINGUAL]', '').replace('[/BILINGUAL]', '');
+                msgDiv.innerHTML = msg.text.replace(/\[BILINGUAL\]/g, '').replace(/\[\/BILINGUAL\]/g, '');
             }
         } else if (msg.text && (msg.text.startsWith('🎯 真心话：') || msg.text.startsWith('🎯 大冒险：'))) {
             msgDiv.classList.add('truth-dare-bubble');
