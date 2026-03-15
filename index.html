@@ -5382,35 +5382,28 @@ async function showTypingAndMessage(text, isInit = false) {
     // 检测是否是双语模式（包含[BILINGUAL]标记）
     const isBilingualMode = text.includes('[BILINGUAL]');
     
-    // 🔥 修改：AI发送5-8条消息（双语模式下不强制拆分，避免破坏标记）
-    if (!isBilingualMode && segments.length < 5) {
-        const originalText = segments.join(' ');
+    // 修复：不再强制添加无意义语气词，只做合理的标点拆分
+    if (!isBilingualMode && segments.length === 1) {
+        const originalText = segments[0].trim();
         
-        // 按标点拆分
-        const parts = originalText.split(/([。！？!?])/);
-        segments = [];
+        // 只按标点做自然拆分，不添加任何填充词
+        const parts = originalText.split(/([。！？!?\n])/);
+        const newSegments = [];
         for (let i = 0; i < parts.length; i += 2) {
             if (parts[i] && parts[i].trim()) {
-                segments.push((parts[i] + (parts[i+1] || '')).trim());
+                newSegments.push((parts[i] + (parts[i+1] || '')).trim());
             }
         }
         
-        // 如果还不够5条，添加语气词
-        const fillers = ['嗯嗯', '然后呢', '是吧', '哈哈', '对了', '就是说'];
-        while (segments.length < 5) {
-            segments.push(fillers[Math.floor(Math.random() * fillers.length)]);
+        // 只有拆分后确实有多条内容才使用拆分结果，否则保持原文
+        if (newSegments.length > 1) {
+            segments = newSegments;
         }
     }
     
-    if (!isBilingualMode) {
-        // 非双语模式：最多8条
-        const maxCount = Math.min(8, Math.max(5, segments.length));
-        segments = segments.slice(0, maxCount);
-    } else {
-        // 双语模式：保持原有分段，最多8条，至少1条
-        const maxCount = Math.min(8, Math.max(1, segments.length));
-        segments = segments.slice(0, maxCount);
-    }
+    // 限制最多8条，不设最低条数要求
+    const maxCount = Math.min(8, segments.length);
+    segments = segments.slice(0, maxCount);
     
     for (let i = 0; i < segments.length; i++) {
         const seg = segments[i].trim();
@@ -5462,7 +5455,7 @@ async function showTypingAndMessage(text, isInit = false) {
         }
 
         if (i < segments.length - 1) {
-            await new Promise(r => setTimeout(r, 3000)); // 固定3秒延迟，模拟打字效果
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 1500)); // 1.5-3秒随机延迟，更自然
         }
     }
     
@@ -5541,7 +5534,7 @@ function getCurrentMusicInfo() {
 document.getElementById('sendMsg').onclick = () => {
     const text = document.getElementById('msgInput').value;
     if (text.trim()) {
-        sendMessage(text, null, null, true);
+        sendMessage(text, null, null, false);
     }
 };
 
@@ -5719,11 +5712,11 @@ function generateSystemPrompt(triggerMsg) {
 ${userPersonaInfo}
 
 【核心规则】
-1. 根据你的人设需要，决定发2-8条消息
-2. 用[SPLIT]分隔每条消息
-3. 每条消息要简短自然，像真人打字
+1. 自然地回复，如果内容较多可以用[SPLIT]分隔成多条消息（不必每次都分多条）
+2. 每条消息简短自然，像真人发消息
+3. 不要添加无意义的语气词或废话来凑数
 4. 不要无意义加emoji，只在需要时加
-5. 可以敷衍、吐槽、撒娇、追问
+5. 可以敷衍、吐槽、撒娇、追问，根据人设自然表达
 
 【隐藏能力 - 查看手机】
 你可以偷偷查看用户的手机信息。
@@ -7707,9 +7700,9 @@ document.getElementById('triggerAIReply').onclick = () => {
 document.getElementById('msgInput').onkeydown = (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
-        const text = e.target.value;
+        const text = document.getElementById('msgInput').value;
         if (text.trim()) {
-            sendMessage(text, null, null, true);
+            sendMessage(text, null, null, false);
         }
     }
 };
@@ -11224,7 +11217,7 @@ async function callRealAPI(userText, image = null) {
     messages.push({ role: "system", content: systemPrompt });
 
     // 添加聊天历史
-    recentHistory.forEach(msg => {
+    recentHistory.forEach((msg, index) => {
         if (msg.recalled) return; // 跳过已撤回的消息
         
         let content = '';
@@ -11251,21 +11244,39 @@ async function callRealAPI(userText, image = null) {
         if (!content || content.trim() === '') return;
 
         const role = msg.type === 'user' ? 'user' : 'assistant';
-        messages.push({ role: role, content: content });
+        
+        // 修复图片格式：如果是最后一条用户消息且带有图片，应用 Vision 格式
+        if (index === recentHistory.length - 1 && role === 'user' && image && (image.startsWith('http') || image.startsWith('data:image'))) {
+            messages.push({
+                role: "user",
+                content: [
+                    { type: "text", text: content },
+                    { type: "image_url", image_url: { url: image } }
+                ]
+            });
+        } else {
+            messages.push({ role: role, content: content });
+        }
     });
 
-    // 添加当前用户消息
-    let currentUserContent = userText;
-    if (image) {
-        // 如果有图片，判断是否使用vision格式
-        if (image.startsWith('http') || image.startsWith('data:image')) {
-            currentUserContent = [
-                { type: "text", text: userText || "请看这张图片" },
-                { type: "image_url", image_url: { url: image } }
-            ];
-        }
+    // --- 核心修复：防止发送重复消息导致AI错乱前言不搭后语 ---
+    // 由于发送消息时已经存入了 history，这里判断如果不重复才额外追加特殊指令
+    const lastMsgContent = messages.length > 0 ? messages[messages.length - 1].content : '';
+    let isDuplicate = false;
+    
+    if (typeof lastMsgContent === 'string' && lastMsgContent.includes(userText)) {
+        isDuplicate = true;
+    } else if (Array.isArray(lastMsgContent) && lastMsgContent[0] && lastMsgContent[0].text && lastMsgContent[0].text.includes(userText)) {
+        isDuplicate = true;
     }
-    messages.push({ role: "user", content: currentUserContent });
+    
+    // 只有非重复消息(比如点击头像主动发话的系统指令)才再次 push
+    if (!isDuplicate && userText) {
+        messages.push({ role: "user", content: userText });
+    }
+    
+    // --- 核心修复：强制追加人设约束，解决聊多了崩人设的问题 ---
+    messages.push({ role: "system", content: "【系统强提醒】请务必牢记你的角色设定，紧贴刚才的上下文进行自然、连贯的回复，绝对不要脱离人设！" });
 
     // 显示正在输入指示器
     showTypingIndicator();
